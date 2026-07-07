@@ -1,0 +1,12 @@
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/CMakeFiles/appmodules.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/CMakeFiles/edit_cache.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/CMakeFiles/rebuild_cache.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/rnasyncstorage_autolinked_build/CMakeFiles/edit_cache.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/rnasyncstorage_autolinked_build/CMakeFiles/rebuild_cache.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/safeareacontext_autolinked_build/CMakeFiles/edit_cache.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/safeareacontext_autolinked_build/CMakeFiles/rebuild_cache.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/rnscreens_autolinked_build/CMakeFiles/edit_cache.dir
+D:/Programs/Nawelni/android/app/.cxx/RelWithDebInfo/6h6v2g50/armeabi-v7a/rnscreens_autolinked_build/CMakeFiles/rebuild_cache.dir
