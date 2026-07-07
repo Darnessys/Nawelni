@@ -14,7 +14,12 @@ import OrderBidding from '../../screens/client/OrderBidding';
 
 const Stack = createNativeStackNavigator();
 
-const screenOptions = { headerShown: false };
+// ✅ الـ "مظلة السحرية" - هنا بنجبر كل الشاشات والـ Stacks تقلب يمين وتسنتر العناوين
+const screenOptions = { 
+  headerShown: false,
+  contentStyle: { direction: 'rtl' }, // 👈 ده السطر اللي بيلم الشمل ويجبره يمين
+  headerTitleAlign: 'center'
+};
 
 function LoadingScreen() {
   return (
@@ -77,9 +82,7 @@ function ClientStack({
 
   console.log(`📍 ClientStack - currentOrderId: ${currentOrderId}`);
 
-  // ✅ راقب التغيير وروح لـ OrderBidding أو CreateOrder
   useEffect(() => {
-    // منع التكرار
     if (isNavigatingRef.current) return;
     
     const prevId = prevOrderIdRef.current;
@@ -87,10 +90,8 @@ function ClientStack({
     
     console.log(`🔄 Navigation check - prev: ${prevId}, current: ${currentId}`);
     
-    // ✅ لو currentOrderId اختلف عن السابق
     if (prevId !== currentId) {
       if (currentId) {
-        // ✅ فيه orderId => روح لـ OrderBidding
         console.log(`🔄 Navigating to OrderBidding: ${currentId}`);
         isNavigatingRef.current = true;
         navigation.navigate('OrderBidding');
@@ -98,7 +99,6 @@ function ClientStack({
           isNavigatingRef.current = false;
         }, 500);
       } else {
-        // ✅ مفيش orderId => روح لـ CreateOrder
         console.log(`🔄 Navigating to CreateOrder`);
         isNavigatingRef.current = true;
         navigation.navigate('CreateOrder');
@@ -111,13 +111,12 @@ function ClientStack({
     prevOrderIdRef.current = currentId;
   }, [currentOrderId, navigation]);
 
-  // ✅ إذا كان currentOrderId = null، اعرض CreateOrder فقط
   if (!currentOrderId) {
     console.log("🏠 No order ID, showing CreateOrder");
     return (
       <Stack.Navigator
         key="create-only"
-        screenOptions={{ ...screenOptions, gestureEnabled: false }}
+        screenOptions={{ ...screenOptions, gestureEnabled: false }} // 👈 بيورث المظلة اليمين
         initialRouteName="CreateOrder"
       >
         <Stack.Screen name="CreateOrder">
@@ -136,14 +135,13 @@ function ClientStack({
     );
   }
 
-  // ✅ إذا كان فيه orderId، اعرض الـ Navigator مع الشاشتين
   const stackKey = `bidding-${currentOrderId}`;
   console.log(`💰 Showing OrderBidding for: ${currentOrderId}`);
 
   return (
     <Stack.Navigator
       key={stackKey}
-      screenOptions={{ ...screenOptions, gestureEnabled: false }}
+      screenOptions={{ ...screenOptions, gestureEnabled: false }} // 👈 بيورث المظلة اليمين
       initialRouteName="OrderBidding"
     >
       <Stack.Screen name="CreateOrder">
@@ -249,5 +247,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textPrimary,
     fontWeight: '600',
+    textAlign: 'center', // تأمين نص اللودينج
   },
 });

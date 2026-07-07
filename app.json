@@ -2,12 +2,12 @@
   "expo": {
     "name": "Nawelni",
     "slug": "Nawelni",
+    "scheme": "nawelni",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "supportsRTL": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,7 +15,6 @@
     },
     "ios": {
       "supportsTablet": true,
-      "supportsRTL": true,
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone."
@@ -27,11 +26,10 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "supportsRTL": true,
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.nawelni.app",
+      "package": "com.anonymous.Nawelni",
       "buildType": "apk"
     },
     "web": {
@@ -44,12 +42,14 @@
         {
           "microphonePermission": "يسمح تطبيق ناولني باستخدام المايك لتسجيل طلباتك صوتياً."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
         "projectId": "265df7c7-987b-4dc2-9546-88e90ea4421e"
-      }
+      },
+      "webClientId": "476712190716-s09vbbl0nk7il6inrv6mgs4s7184pcim.apps.googleusercontent.com"
     }
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -10,8 +10,8 @@ import {
   Platform,
   StatusBar
 } from 'react-native';
-import { db } from '../../firebaseConfig'; 
-import { doc, onSnapshot } from 'firebase/firestore'; 
+import { db, auth } from '../../firebaseConfig'; 
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore'; 
 import { 
   updateOrderWithCounterPrice, 
   rejectCounterOffer, 
@@ -19,6 +19,30 @@ import {
   completeOrder 
 } from '../../services/OrderService';
 import { useAuth } from '../../src/features/auth/context/AuthContext';
+import RatingModal from '../RatingModal';
+import { submitRating, hasUserRatedOrder, getUserAverageRating } from '../../services/RatingService';
+
+const StarsDisplay = ({ rating, size = 14, color = '#F9A825' }) => {
+  if (!rating || rating === 0) {
+    return <Text style={{ fontSize: size, color: '#ccc' }}>جديد</Text>;
+  }
+  
+  const fullStars = Math.floor(rating);
+  const hasHalf = rating - fullStars >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
+  
+  let stars = '';
+  for (let i = 0; i < fullStars; i++) stars += '⭐';
+  if (hasHalf) stars += '✨';
+  for (let i = 0; i < emptyStars; i++) stars += '☆';
+  
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+      <Text style={{ fontSize: size }}>{stars}</Text>
+      <Text style={{ fontSize: size - 2, color: color, fontWeight: '600' }}>{rating}</Text>
+    </View>
+  );
+};
 
 export default function OrderBidding({ 
   currentOrderId, 
@@ -38,6 +62,14 @@ export default function OrderBidding({
   const toastTimerRef = useRef(null);
 
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratedRunnerId, setRatedRunnerId] = useState(null);
+  const [ratedRunnerName, setRatedRunnerName] = useState("");
+  const [hasRated, setHasRated] = useState(false);
+  const [isCheckingRating, setIsCheckingRating] = useState(false);
+
+  const [runnerRatings, setRunnerRatings] = useState({});
 
   const showToast = (message, type = 'success') => {
     if (!isMountedRef.current) return;
@@ -69,11 +101,74 @@ export default function OrderBidding({
   }, []);
 
   useEffect(() => {
+    if (offersList.length === 0) return;
+
+    const fetchRunnerRatings = async () => {
+      const ratings = {};
+      
+      for (const offer of offersList) {
+        const runnerId = offer.runnerId;
+        if (!runnerId || ratings[runnerId]) continue;
+        
+        try {
+          const ratingData = await getUserAverageRating(runnerId);
+          ratings[runnerId] = ratingData;
+        } catch (error) {
+          console.error(`Error fetching rating for runner ${runnerId}:`, error);
+        }
+      }
+      
+      if (isMountedRef.current) {
+        setRunnerRatings(ratings);
+      }
+    };
+
+    fetchRunnerRatings();
+  }, [offersList.length]);
+
+  const checkIfAlreadyRated = useCallback(async (orderId, runnerId) => {
+    if (!orderId || !auth.currentUser?.uid) return false;
+    
+    setIsCheckingRating(true);
+    
+    try {
+      const alreadyRated = await hasUserRatedOrder(orderId, auth.currentUser.uid, "client_to_runner");
+      
+      if (isMountedRef.current) {
+        setHasRated(alreadyRated);
+        setIsCheckingRating(false);
+        
+        if (alreadyRated) {
+          console.log("✅ العميل قيم الكابتن بالفعل - مسموح بطلب جديد");
+        } else {
+          console.log("⚠️ العميل ما قيمش الكابتن - فتح RatingModal");
+          setRatedRunnerId(runnerId);
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              setShowRatingModal(true);
+            }
+          }, 500);
+        }
+      }
+      
+      return alreadyRated;
+    } catch (error) {
+      console.error("Error checking rating:", error);
+      if (isMountedRef.current) {
+        setIsCheckingRating(false);
+      }
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
     if (!currentOrderId) {
       if (isMountedRef.current) {
         setOrderStatus('waiting');
         setOffersList([]);
         setRunnerInfo(null);
+        setHasRated(false);
+        setShowRatingModal(false);
       }
       return;
     }
@@ -131,7 +226,19 @@ export default function OrderBidding({
         if (data.status === 'completed') {
           setOrderStatus('completed');
           setOffersList([]);
-          setRunnerInfo(null);
+          
+          const runnerData = {
+            id: data.runnerId || '',
+            finalPrice: data.deliveryFee || 0,
+            runnerName: data.runnerName || "الكابتن"
+          };
+          setRunnerInfo(runnerData);
+          
+          if (!hasRated) {
+            setRatedRunnerId(runnerData.id);
+            setRatedRunnerName(runnerData.runnerName);
+            checkIfAlreadyRated(currentOrderId, runnerData.id);
+          }
         }
       },
       (error) => {
@@ -207,6 +314,38 @@ export default function OrderBidding({
     }
   };
 
+  const handleSubmitRating = async (rating, comment) => {
+    if (!currentOrderId || !ratedRunnerId) return;
+    
+    try {
+      await submitRating(
+        currentOrderId,
+        auth.currentUser?.uid,
+        ratedRunnerId,
+        rating,
+        comment,
+        "client_to_runner"
+      );
+      
+      // ⭐ تحديث الطلب: clientDismissed = true
+      const orderRef = doc(db, "orders", currentOrderId);
+      await updateDoc(orderRef, { clientDismissed: true });
+      
+      showToast("✅ شكراً لتقييمك! 🌟", 'success');
+      setShowRatingModal(false);
+      setHasRated(true);
+    } catch (error) {
+      console.error("Submit rating error:", error);
+      if (error.message?.includes('بالفعل')) {
+        setShowRatingModal(false);
+        setHasRated(true);
+        showToast("⚠️ تم تقييم هذا الكابتن مسبقاً", 'info');
+      } else {
+        Alert.alert("خطأ", "لم نتمكن من حفظ تقييمك. حاول مرة أخرى.");
+      }
+    }
+  };
+
   const handleCancelMyOrder = () => {
     if (isProcessingRef.current || !isMountedRef.current) {
       console.log("⚠️ Already processing or unmounted");
@@ -277,38 +416,15 @@ export default function OrderBidding({
   };
 
   const handleBackToStart = () => {
-    if (isReturningRef.current || !isMountedRef.current) {
-      console.log("⚠️ Already returning or unmounted, ignoring");
-      return;
-    }
-    isReturningRef.current = true;
-    
-    console.log("🔙 العودة للشاشة الرئيسية (مرة واحدة)");
-    
-    if (onOrderFinished) {
-      console.log("📞 استدعاء onOrderFinished");
-      onOrderFinished();
-    }
-    if (onReset) {
-      console.log("📞 استدعاء onReset");
-      onReset();
-    }
-    
+    console.log("🔙 العودة للشاشة الرئيسية");
     setOrderStatus('waiting');
     setOffersList([]);
     setRunnerInfo(null);
     setIsProcessing(false);
     isProcessingRef.current = false;
-    
-    console.log("📞 تنفيذ setCurrentOrderId(null)");
+    setHasRated(false);
+    setShowRatingModal(false);
     setCurrentOrderId(null);
-    
-    setTimeout(() => {
-      if (isMountedRef.current) {
-        isReturningRef.current = false;
-        console.log("✅ isReturningRef reset");
-      }
-    }, 1500);
   };
 
   // ===== UI =====
@@ -339,13 +455,44 @@ export default function OrderBidding({
           <Text style={styles.giantEmoji}>🎉🥳</Text>
           <Text style={[styles.statusTitle, { color: '#2ecc71' }]}>بالهنا والشفا! طلبك وصل بالسلامة</Text>
           <Text style={styles.statusDesc}>تم إنهاء الرحلة وتوصيل الأغراض بنجاح بواسطة الكابتن.</Text>
-          <View style={styles.infoBox}>
-            <Text style={styles.infoBoxText}>⭐ سيتم تفعيل نظام تقييم الكابتن قريباً!</Text>
-          </View>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#2ecc71' }]} onPress={handleBackToStart}>
-            <Text style={styles.actionBtnText}>عمل طلب جديد 🛒</Text>
-          </TouchableOpacity>
+          
+          {isCheckingRating && (
+            <View style={styles.checkingRatingCard}>
+              <ActivityIndicator size="small" color="#F9A825" />
+              <Text style={styles.checkingRatingText}>جاري التحقق من التقييم...</Text>
+            </View>
+          )}
+          
+          {!isCheckingRating && !hasRated && (
+            <>
+              <TouchableOpacity 
+                style={[styles.actionBtn, { backgroundColor: '#F9A825', marginBottom: 10 }]} 
+                onPress={() => setShowRatingModal(true)}
+              >
+                <Text style={styles.actionBtnText}>⭐ قيم الكابتن للمتابعة</Text>
+              </TouchableOpacity>
+              <Text style={styles.ratingNotice}>
+                ⚠️ يجب تقييم الكابتن للمتابعة إلى طلب جديد
+              </Text>
+            </>
+          )}
+          
+          {!isCheckingRating && hasRated && (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#2ecc71' }]} onPress={handleBackToStart}>
+              <Text style={styles.actionBtnText}>عمل طلب جديد 🛒</Text>
+            </TouchableOpacity>
+          )}
         </View>
+
+        <RatingModal
+          visible={showRatingModal}
+          onClose={() => {}}
+          onSubmit={handleSubmitRating}
+          title="قيم الكابتن ⭐"
+          subtitle="كيف كانت تجربتك مع"
+          ratedPersonName={ratedRunnerName || "الكابتن"}
+          required={true}
+        />
       </View>
     );
   }
@@ -374,7 +521,7 @@ export default function OrderBidding({
 
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={[styles.card, { borderColor: '#f39c12', borderWidth: 2, backgroundColor: '#fffbf5' }]}>
-            <Text style={styles.giantEmoji}>📦🤝</Text>
+            <Text style={styles.giantEmoji}>🤝📦</Text>
             <Text style={[styles.statusTitle, { color: '#d35400' }]}>هل استلمت الطلب؟</Text>
             <View style={[styles.infoBox, { backgroundColor: '#fef5e7' }]}>
               <Text style={[styles.infoBoxText, { color: '#e67e22', lineHeight: 22 }]}>
@@ -392,7 +539,6 @@ export default function OrderBidding({
     );
   }
 
-  // ✅ حالة accepted - تم إزالة زر العودة للرئيسية
   if (orderStatus === 'accepted') {
     return (
       <View style={styles.container}>
@@ -416,7 +562,7 @@ export default function OrderBidding({
         </View>
 
         <View style={[styles.card, { borderColor: '#3498db', borderWidth: 2 }]}>
-          <Text style={styles.giantEmoji}>🏍️💨</Text>
+          <Text style={[styles.giantEmoji, { textAlign: 'center' }]}>💨🏍️</Text>
           <Text style={[styles.statusTitle, { color: '#3498db' }]}>أبشر يا فندم! طلبك انطلق!</Text>
           <View style={[styles.infoBox, { backgroundColor: '#e8f4f8' }]}>
             <Text style={[styles.infoBoxText, { color: '#2980b9', lineHeight: 22 }]}>
@@ -424,7 +570,6 @@ export default function OrderBidding({
             </Text>
           </View>
           <Text style={styles.noticeText}>* بمجرد وصول المندوب، ستظهر لك لوحة تأكيد الاستلام فوراً.</Text>
-          {/* ✅ تم إزالة زر العودة للرئيسية */}
         </View>
       </View>
     );
@@ -466,31 +611,41 @@ export default function OrderBidding({
             </View>
           )}
 
-          <Text style={styles.sectionHeader}>🎯 العروض المقدمة لايف ({offersList.length}):</Text>
+          <Text style={[styles.sectionHeader, { textAlign: 'left', writingDirection: 'rtl' }]}>🎯 العروض المقدمة لايف ({offersList.length}):</Text>
 
           {offersList.length === 0 ? (
             <Text style={styles.emptyText}>في انتظار أول عرض سعر من الكباتن... حمسهم برفع السعر لو تأخروا! ☕</Text>
           ) : (
             <View style={styles.offersContainer}>
-              {offersList.map((offer, index) => (
-                <View key={index} style={styles.offerCard}>
-                  <View style={styles.offerInfo}>
-                    <Text style={styles.runnerName}>{offer.runnerName || 'كابتن'}</Text>
-                    <Text style={styles.offerSub}>يقترح توصيل طلبك بـ:</Text>
-                  </View>
-                  <View style={styles.offerActions}>
-                    <Text style={styles.priceText}>{offer.proposedPrice || 0} ج</Text>
-                    <View style={styles.btnRow}>
-                      <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#2ecc71' }]} onPress={() => handleAcceptRunnerOffer(offer.proposedPrice, offer.runnerId)} disabled={isProcessing}>
-                        <Text style={styles.smallBtnText}>قبول</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#e74c3c' }]} onPress={() => handleRejectRunnerOffer(offer.runnerId)} disabled={isProcessing}>
-                        <Text style={styles.smallBtnText}>رفض</Text>
-                      </TouchableOpacity>
+              {offersList.map((offer, index) => {
+                const runnerRating = runnerRatings[offer.runnerId];
+                
+                return (
+                  <View key={index} style={styles.offerCard}>
+                    <View style={styles.offerInfo}>
+                      <Text style={styles.runnerName}>{offer.runnerName || 'كابتن'}</Text>
+                      {runnerRating && runnerRating.totalRatings > 0 && (
+                        <View style={styles.runnerRatingRow}>
+                          <StarsDisplay rating={runnerRating.average} size={11} />
+                          <Text style={styles.runnerRatingCount}>({runnerRating.totalRatings})</Text>
+                        </View>
+                      )}
+                      <Text style={styles.offerSub}>يقترح توصيل طلبك بـ:</Text>
+                    </View>
+                    <View style={styles.offerActions}>
+                      <Text style={styles.priceText}>{offer.proposedPrice || 0} ج</Text>
+                      <View style={styles.btnRow}>
+                        <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#2ecc71' }]} onPress={() => handleAcceptRunnerOffer(offer.proposedPrice, offer.runnerId)} disabled={isProcessing}>
+                          <Text style={styles.smallBtnText}>قبول</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#e74c3c' }]} onPress={() => handleRejectRunnerOffer(offer.runnerId)} disabled={isProcessing}>
+                          <Text style={styles.smallBtnText}>رفض</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -528,21 +683,54 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   scrollContainer: { padding: 15, paddingBottom: 30 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, alignItems: 'stretch' },
+  card: { backgroundColor: '#fff', borderRadius: 12, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, alignItems: 'stretch', direction: 'rtl' },
   giantEmoji: { fontSize: 50, textAlign: 'center', marginBottom: 10 },
-  statusTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  statusTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'Auto', marginBottom: 10, writingDirection: 'rtl'},
   statusDesc: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 15, lineHeight: 20 },
   infoBox: { backgroundColor: '#f9f9f9', padding: 12, borderRadius: 8, marginVertical: 15, borderStyle: 'dashed', borderWidth: 1, borderColor: '#ddd' },
   infoBoxText: { fontSize: 13, color: '#7f8c8d', textAlign: 'center' },
   actionBtn: { padding: 14, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
   actionBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   noticeText: { color: '#7f8c8d', fontSize: 11, textAlign: 'center', marginTop: 10, lineHeight: 16 },
+  ratingNotice: {
+    color: '#E74C3C',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  checkingRatingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    gap: 10,
+  },
+  checkingRatingText: {
+    color: '#F57F17',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   sectionHeader: { fontSize: 14, fontWeight: 'bold', color: '#333', textAlign: 'right', marginTop: 15, marginBottom: 10, borderBottomWidth: 1, borderColor: '#eee', paddingBottom: 6 },
   emptyText: { textAlign: 'center', color: '#999', padding: 20, backgroundColor: '#fafafa', borderRadius: 8, borderStyle: 'dashed', borderWidth: 1, borderColor: '#ccc', fontSize: 13 },
   offersContainer: {},
   offerCard: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRightWidth: 5, borderRightColor: '#e67e22', padding: 12, borderRadius: 8, flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   offerInfo: { alignItems: 'flex-start', flex: 1, paddingRight: 10 },
   runnerName: { fontSize: 16, fontWeight: 'bold', color: '#e67e22', textAlign: 'right' },
+  runnerRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    gap: 3,
+  },
+  runnerRatingCount: {
+    fontSize: 9,
+    color: '#888',
+    fontWeight: '600',
+  },
   offerSub: { color: '#555', fontSize: 12, marginTop: 2, textAlign: 'right' },
   offerActions: { alignItems: 'center' },
   priceText: { fontSize: 20, fontWeight: 'bold', color: '#212121', marginBottom: 2 },

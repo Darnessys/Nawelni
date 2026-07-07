@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TextInput, 
-  TouchableOpacity, 
-  ActivityIndicator, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -22,7 +22,6 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
   const [role, setRole] = useState(null);
   const [vehicle, setVehicle] = useState(null);
   const [loading, setLoading] = useState(false);
-  
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const isMountedRef = useRef(true);
   const toastTimerRef = useRef(null);
@@ -40,14 +39,11 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
 
   const showToast = (message, type = 'success') => {
     if (!isMountedRef.current) return;
-    
     setToast({ show: true, message, type });
-    
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
       toastTimerRef.current = null;
     }
-    
     toastTimerRef.current = setTimeout(() => {
       if (isMountedRef.current) {
         setToast({ show: false, message: '', type: 'success' });
@@ -87,7 +83,6 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
 
     try {
       const userDocRef = doc(db, "users", currentUserProfile.uid);
-
       const updatedData = {
         name: name.trim(),
         phone: phone,
@@ -98,7 +93,6 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
       };
 
       await updateDoc(userDocRef, updatedData);
-
       showToast('✅ تم حفظ البيانات بنجاح!', 'success');
 
       onProfileSave({
@@ -108,7 +102,6 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
 
     } catch (error) {
       console.error("❌ خطأ أثناء استكمال البيانات:", error);
-
       if (error.code === 'permission-denied') {
         Alert.alert('🔒 خطأ في الصلاحيات', 'تأكد من أنك تمتلك الصلاحية لتعديل البيانات');
       } else {
@@ -124,7 +117,7 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-
+      
       {toast.show && (
         <View style={[
           styles.toast,
@@ -154,6 +147,7 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
               </Text>
             </View>
 
+            {/* ✅ 1. اختيار نوع الحساب */}
             <Text style={styles.label}>👤 اختر نوع الحساب:</Text>
             <View style={styles.selectorContainer}>
               <TouchableOpacity
@@ -191,6 +185,7 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
               </TouchableOpacity>
             </View>
 
+            {/* ✅ 2. وسيلة التوصيل (للكابتن فقط) */}
             {role === 'runner' && (
               <View>
                 <Text style={styles.label}>🛵 وسيلة التوصيل الخاصة بك:</Text>
@@ -249,10 +244,10 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
               </View>
             )}
 
+            {/* ✅ 3. الاسم الكامل - RTL */}
             <Text style={styles.label}>👤 الاسم الكامل</Text>
             <TextInput
-              /* 🔹 تم دمج ستايل الـ nameInput لإجبار خانة الاسم فقط على الاتجاه اليمين */
-              style={[styles.input, styles.nameInput, loading && styles.inputDisabled]}
+              style={[styles.input, styles.inputRTL, loading && styles.inputDisabled]}
               placeholder="أدخل اسمك الكامل..."
               placeholderTextColor="#999"
               value={name}
@@ -260,9 +255,10 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
               editable={!loading}
             />
 
+            {/* ✅ 4. رقم الهاتف - LTR */}
             <Text style={styles.label}>📱 رقم الهاتف (للتواصل):</Text>
             <TextInput
-              style={[styles.input, loading && styles.inputDisabled]}
+              style={[styles.input, styles.inputLTR, loading && styles.inputDisabled]}
               placeholder="01xxxxxxxxx"
               placeholderTextColor="#999"
               value={phone}
@@ -287,7 +283,6 @@ export default function CompleteProfile({ currentUserProfile, onProfileSave }) {
                 <Text style={styles.submitButtonText}>🚀 حفظ الحساب والانطلاق</Text>
               )}
             </TouchableOpacity>
-
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -316,7 +311,8 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8
+    shadowRadius: 8,
+    alignItems: 'stretch',
   },
   header: {
     alignItems: 'center',
@@ -344,7 +340,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#34495e',
     marginBottom: 8,
-    textAlign: 'left'
+    textAlign: 'Auto',
+    alignSelf: 'flex-start',
+    width: '100%',
   },
   input: {
     backgroundColor: '#f8f9fa',
@@ -352,13 +350,18 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderRadius: 10,
     padding: 12,
-    marginBottom: 4,
+    marginBottom: 16,
     fontSize: 15,
     color: '#333',
-    textAlign: 'left' /* الافتراضي يفضل يسار عشان الأرقام والـ placeholder */
+    width: '100%',
   },
-  nameInput: {
-    textAlign: 'right' /* 🔹 هنا الإجبار لخانة الاسم فقط لتروح يمين غصب عنها */
+  inputRTL: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  inputLTR: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   inputDisabled: {
     opacity: 0.7,
@@ -366,58 +369,62 @@ const styles = StyleSheet.create({
   hintText: {
     fontSize: 11,
     color: '#95a5a6',
-    textAlign: 'left',
     marginBottom: 16,
+    textAlign: 'auto',
+    alignSelf: 'flex-start',
+    width: '100%',
   },
   selectorContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between', 
+    justifyContent: 'space-between',
     marginBottom: 20,
+    width: '100%',
   },
-  selectorButton: { 
-    flex: 1, 
-    borderWidth: 2, 
-    borderColor: '#ddd', 
-    borderRadius: 10, 
-    padding: 12, 
-    alignItems: 'center', 
+  selectorButton: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
     backgroundColor: '#fff',
     marginHorizontal: 4,
   },
   selectorDisabled: {
     opacity: 0.5,
   },
-  clientActive: { 
-    backgroundColor: '#4a148c', 
-    borderColor: '#4a148c' 
+  clientActive: {
+    backgroundColor: '#4a148c',
+    borderColor: '#4a148c'
   },
-  runnerActive: { 
-    backgroundColor: '#2ecc71', 
-    borderColor: '#2ecc71' 
+  runnerActive: {
+    backgroundColor: '#2ecc71',
+    borderColor: '#2ecc71'
   },
-  selectorText: { 
-    color: '#333', 
-    fontWeight: 'bold', 
-    fontSize: 13 
+  selectorText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 13
   },
-  textActive: { 
-    color: '#fff' 
+  textActive: {
+    color: '#fff'
   },
-  submitButton: { 
-    backgroundColor: '#4a148c', 
-    padding: 16, 
-    borderRadius: 10, 
-    alignItems: 'center', 
-    marginTop: 8,
+  submitButton: {
+    backgroundColor: '#4a148c',
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 12,
     elevation: 2,
+    width: '100%',
   },
   submitButtonDisabled: {
     opacity: 0.7,
   },
-  submitButtonText: { 
-    color: '#fff', 
-    fontSize: 16, 
-    fontWeight: 'bold' 
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold'
   },
   toast: {
     position: 'absolute',

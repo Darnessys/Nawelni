@@ -20,6 +20,30 @@ import { createOrder } from '../../services/OrderService';
 import { colors } from '../../src/core/theme';
 import { ACTIVE_CLIENT_STATUSES } from '../../src/core/constants/orderStatuses';
 import { useAuth } from '../../src/features/auth/context/AuthContext';
+import { getUserAverageRating } from '../../services/RatingService'; // ⭐ إضافة
+
+// ⭐ Component صغير لعرض النجوم
+const StarsDisplay = ({ rating, size = 14, color = '#F9A825' }) => {
+  if (!rating || rating === 0) {
+    return <Text style={{ fontSize: size, color: '#ccc' }}>جديد</Text>;
+  }
+  
+  const fullStars = Math.floor(rating);
+  const hasHalf = rating - fullStars >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
+  
+  let stars = '';
+  for (let i = 0; i < fullStars; i++) stars += '⭐';
+  if (hasHalf) stars += '✨';
+  for (let i = 0; i < emptyStars; i++) stars += '☆';
+  
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+      <Text style={{ fontSize: size }}>{stars}</Text>
+      <Text style={{ fontSize: size - 2, color: color, fontWeight: '600' }}>{rating}</Text>
+    </View>
+  );
+};
 
 // Voice recognition - safe import
 let ExpoSpeechRecognitionModule = null;
@@ -51,6 +75,9 @@ export default function CreateOrder({
   const [addressText, setAddressText] = useState("جاري تحديد الموقع... 🗺️");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingActiveOrder, setIsCheckingActiveOrder] = useState(true);
+
+  // ⭐ State لتقييم العميل
+  const [myRating, setMyRating] = useState({ average: 0, totalRatings: 0 });
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const hasCheckedOrder = useRef(false);
@@ -87,6 +114,25 @@ export default function CreateOrder({
       }
     };
   }, []);
+
+  // ⭐ جلب تقييم العميل
+  useEffect(() => {
+    const currentUserId = clientId || auth.currentUser?.uid;
+    if (!currentUserId) return;
+
+    const fetchMyRating = async () => {
+      try {
+        const ratingData = await getUserAverageRating(currentUserId);
+        if (isMountedRef.current) {
+          setMyRating(ratingData);
+        }
+      } catch (error) {
+        console.error("Error fetching my rating:", error);
+      }
+    };
+
+    fetchMyRating();
+  }, [clientId]);
 
   useSpeechRecognitionEvent("start", () => {
     if (isVoiceSupported && isMountedRef.current) setVoiceStatus('recording');
@@ -186,9 +232,16 @@ export default function CreateOrder({
         const querySnapshot = await getDocs(q);
         
         if (!querySnapshot.empty && isMountedRef.current) {
-          const activeOrder = querySnapshot.docs[0];
-          setCurrentOrderId(activeOrder.id);
-          if (onOrderCreated) onOrderCreated();
+          // ⭐ فلتر: نستبعد الطلبات المكتملة - CreateOrder مش مسئول عنها
+          const activeOrders = querySnapshot.docs.filter(
+            doc => doc.data().status !== 'completed'
+          );
+          
+          if (activeOrders.length > 0) {
+            const activeOrder = activeOrders[0];
+            setCurrentOrderId(activeOrder.id);
+            if (onOrderCreated) onOrderCreated();
+          }
         }
       } catch (error) {
         console.error("Error checking active order:", error);
@@ -412,8 +465,17 @@ export default function CreateOrder({
         </View>
       )}
 
+      {/* ⭐ Header مع تقييم العميل */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>ناولني 🛵</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>ناولني 🛵</Text>
+          {myRating.totalRatings > 0 && (
+            <View style={styles.myRatingRow}>
+              <StarsDisplay rating={myRating.average} size={12} color="#FFD700" />
+              <Text style={styles.myRatingCount}>({myRating.totalRatings})</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutBtnText}>🚪 خروج</Text>
         </TouchableOpacity>
@@ -486,7 +548,7 @@ export default function CreateOrder({
                     <Text style={styles.audioCardText}>✨ نص طلبك:</Text>
                   </View>
                   <TextInput 
-                    style={styles.textArea} 
+                    style={[styles.textArea, { textAlign: 'right', writingDirection: 'rtl' }]} 
                     multiline 
                     value={orderText} 
                     onChangeText={setOrderText} 
@@ -501,7 +563,7 @@ export default function CreateOrder({
             <View style={styles.inputWrapper}>
               <Text style={styles.fieldLabel}>📜 اكتب طلبك:</Text>
               <TextInput 
-                style={styles.textArea} 
+                style={[styles.textArea, { textAlign: 'right', writingDirection: 'rtl' }]} 
                 placeholder="اكتب هنا كل اللي محتاجه ليتم عرضه على اقرب مندوب توصيل ليك" 
                 multiline 
                 value={orderText} 
@@ -516,7 +578,7 @@ export default function CreateOrder({
             <Text style={styles.deliveryLabel}>💰 قيمة التوصيل المقترحة</Text>
             <View style={styles.counterRow}>
               <TouchableOpacity 
-                onPress={() => setDeliveryFee(prev => Math.max(15, prev - 5))} 
+                onPress={() => setDeliveryFee(prev => Math.max(10, prev - 5))} 
                 style={[styles.counterBtn, styles.counterBtnMinus]}
               >
                 <Text style={styles.counterBtnText}>−</Text>
@@ -609,11 +671,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
+  // ⭐ تعديل للـ header layout
+  headerLeft: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
     letterSpacing: 1,
+  },
+  // ⭐ تقييم العميل في الهيدر
+  myRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  myRatingCount: {
+    fontSize: 10,
+    color: '#FFD700',
+    fontWeight: '600',
   },
   logoutBtn: {
     backgroundColor: 'rgba(255,255,255,0.2)',
@@ -782,7 +861,7 @@ const styles = StyleSheet.create({
     color: '#6C1B8D', 
     fontWeight: '600', 
     marginBottom: 8, 
-    textAlign: 'right',
+    textAlign: 'Auto',
   },
   textArea: {
     width: '100%',
@@ -794,8 +873,6 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 15,
     color: '#2C3E50',
-    // 👇 ده السحر اللي بيخلي النص يحود تلقائياً حسب لغة الحرف الأول
-    writingDirection: 'auto', 
   },
   deliveryCard: {
     backgroundColor: '#FFFFFF',
@@ -819,7 +896,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   counterRow: { 
-    flexDirection: 'row', 
+    flexDirection: 'row-reverse', 
     alignItems: 'center', 
     justifyContent: 'center',
   },
@@ -895,7 +972,7 @@ const styles = StyleSheet.create({
   locationText: { 
     fontSize: 13, 
     fontWeight: '500', 
-    textAlign: 'right', 
+    textAlign: 'Auto', 
     lineHeight: 18,
     flex: 1,
   },

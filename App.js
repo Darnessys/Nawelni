@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { collection, query, or, where, onSnapshot } from 'firebase/firestore';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { I18nManager } from 'react-native';
-import * as Updates from 'expo-updates';
 
 import { db } from './src/core/config/firebase';
 import { ACTIVE_CLIENT_STATUSES, USER_ROLE } from './src/core/constants/orderStatuses';
@@ -18,7 +16,6 @@ function AppContent() {
   const resetTimerRef = useRef(null);
   const isMountedRef = useRef(true);
 
-  // ===== Cleanup =====
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -30,23 +27,6 @@ function AppContent() {
     };
   }, []);
 
-  // ===== ✅ RTL Setup (الحل السحري) =====
-  useEffect(() => {
-    const setupRTL = async () => {
-      try {
-        if (!I18nManager.isRTL) {
-          I18nManager.allowRTL(true);
-          I18nManager.forceRTL(true);
-          await Updates.reloadAsync();
-        }
-      } catch (error) {
-        console.log("RTL Setup Error:", error);
-      }
-    };
-    setupRTL();
-  }, []);
-
-  // ===== Listen to orders =====
   useEffect(() => {
     if (!userProfile?.profileComplete) {
       setOrders([]);
@@ -88,7 +68,6 @@ function AppContent() {
     };
   }, [userProfile?.uid, userProfile?.profileComplete]);
 
-  // ===== Auto-select active order =====
   useEffect(() => {
     if (!isMountedRef.current) return;
     if (userProfile?.role !== USER_ROLE.CLIENT) return;
@@ -102,17 +81,20 @@ function AppContent() {
     }
     if (orders.length === 0) return;
 
+    // ⭐ تم إرجاع order.status !== 'completed'
+    // ⭐ مع إضافة !order.clientDismissed
     const activeOrders = orders.filter(
       (order) =>
         order.requesterId === userProfile?.uid &&
         ACTIVE_CLIENT_STATUSES.includes(order.status) &&
         order.status !== 'cancelled' &&
-        order.status !== 'completed'
+        order.status !== 'completed' &&
+        !order.clientDismissed
     );
 
     if (activeOrders.length > 0) {
       const activeOrder = activeOrders[0];
-      console.log(`🔄 Auto-selecting active order: ${activeOrder.id}`);
+      console.log(`🔄 Auto-selecting active order: ${activeOrder.id} (status: ${activeOrder.status})`);
       setCurrentOrderId(activeOrder.id);
     } else {
       if (currentOrderId !== null) {
@@ -122,7 +104,6 @@ function AppContent() {
     }
   }, [orders, userProfile?.role, userProfile?.uid, currentOrderId]);
 
-  // ===== Custom setCurrentOrderId =====
   const handleSetCurrentOrderId = useCallback((newOrderId) => {
     console.log(`📞 setCurrentOrderId called: ${newOrderId}`);
     if (!isMountedRef.current) return;
@@ -140,20 +121,22 @@ function AppContent() {
           console.log("✅ Manual reset flag cleared");
         }
         resetTimerRef.current = null;
-      }, 1500);
+      }, 2000);
     } else {
       setCurrentOrderId(newOrderId);
     }
   }, []);
 
-  // ===== Memoized active orders =====
+  // ⭐ تم إرجاع order.status !== 'completed'
+  // ⭐ مع إضافة !order.clientDismissed
   const activeOrdersCount = useMemo(() => {
     return orders.filter(
       (order) =>
         order.requesterId === userProfile?.uid &&
         ACTIVE_CLIENT_STATUSES.includes(order.status) &&
         order.status !== 'cancelled' &&
-        order.status !== 'completed'
+        order.status !== 'completed' &&
+        !order.clientDismissed
     ).length;
   }, [orders, userProfile?.uid]);
 

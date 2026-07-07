@@ -10,6 +10,7 @@ export const ACTIVE_CLIENT_STATUSES = [
   ORDER_STATUS.PENDING,
   ORDER_STATUS.ACCEPTED,
   ORDER_STATUS.RUNNER_DELIVERED,
+  ORDER_STATUS.COMPLETED, // ⭐ تمت الإضافة - عشان التقييم
 ];
 
 export const USER_ROLE = {

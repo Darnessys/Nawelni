@@ -9,23 +9,107 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
-  StatusBar
+  StatusBar,
+  Alert
 } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInWithCredential,
+  GoogleAuthProvider 
+} from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
   const isMountedRef = useRef(true);
   const toastTimerRef = useRef(null);
   
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    // 🎯 التعديل السحري: نمرر معرف الأندرويد مباشرة في خانة الـ clientId لو المنصة أندرويد
+    clientId: Platform.OS === 'android' 
+      ? '476712190716-um7873sqr5g5l57jr933qrs2k6sbcruj.apps.googleusercontent.com' // الـ Android Client ID
+      : '476712190716-s09vbbl0nk7il6inrv6mgs4s7184pcim.apps.googleusercontent.com', // الـ Web Client ID
+    
+    scopes: ['profile', 'email'],
+  });
+
+  // ⭐ معالجة نتيجة Google Sign-In
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      const credential = GoogleAuthProvider.credential(id_token);
+      handleGoogleSignIn(credential);
+    }
+  }, [response]);
+
+  const handleGoogleSignIn = async (credential) => {
+    if (!isMountedRef.current) return;
+    setGoogleLoading(true);
+    
+    try {
+      const userCredential = await signInWithCredential(auth, credential);
+      const user = userCredential.user;
+
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (userData.profileComplete) {
+          showToast(`👋 مرحباً بك ${userData.name || 'عزيزي'}`, 'success');
+        } else {
+          showToast("📝 مرحباً! يرجى استكمال بيانات حسابك", 'info');
+        }
+      } else {
+        const userData = {
+          uid: user.uid,
+          email: user.email,
+          name: user.displayName || '',
+          phone: '',
+          role: null,
+          profileComplete: false,
+          photoURL: user.photoURL || '',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+
+        await setDoc(doc(db, "users", user.uid), userData);
+        showToast("🎉 تم إنشاء حسابك! يرجى استكمال البيانات", 'success');
+      }
+    } catch (error) {
+      console.log('⚠️ Google Sign-In Error:', error.code, error.message);
+      
+      if (isMountedRef.current) {
+        switch (error.code) {
+          case 'auth/account-exists-with-different-credential':
+            showToast("📧 هذا الإيميل مسجل بطريقة أخرى", 'error');
+            break;
+          case 'auth/network-request-failed':
+            showToast("🌐 تحقق من اتصالك بالإنترنت", 'error');
+            break;
+          default:
+            showToast("❌ فشل تسجيل الدخول بـ Google. حاول مرة أخرى", 'error');
+        }
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setGoogleLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -117,9 +201,9 @@ export default function Login({ navigation }) {
         }
       }
     } catch (error) {
-      if (error.code !== 'auth/invalid-credential' && error.code !== 'auth/wrong-password' && error.code !== 'auth/user-not-found') {
-        console.error('❌ Auth Error:', error);
-      }
+      console.log('⚠️ تم التقاط خطأ Firebase بنجاح:', error.code, error.message);
+
+      if (isMountedRef && !isMountedRef.current) return;
 
       switch (error.code) {
         case 'auth/network-request-failed':
@@ -147,7 +231,9 @@ export default function Login({ navigation }) {
           showToast(`❌ حدث خطأ: ${error.message || 'يرجى المحاولة مرة أخرى'}`, 'error');
       }
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef && isMountedRef.current) {
+        setLoading(false);
+      } else {
         setLoading(false);
       }
     }
@@ -198,10 +284,39 @@ export default function Login({ navigation }) {
             </Text>
           </View>
 
-          <View style={styles.inputContainer}>
+          {/* ⭐ Google Sign-In Button */}
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={() => {
+              console.log(request?.redirectUri);
+              promptAsync();
+            }}
+            disabled={!request || googleLoading || loading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <View style={styles.googleButtonContent}>
+                <Text style={styles.googleIcon}>G</Text>
+                <Text style={styles.googleButtonText}>
+                  تسجيل الدخول بحساب Google
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* ⭐ فاصل */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>أو</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* ✅ حقل البريد الإلكتروني */}
+          <View style={styles.inputBlock}>
             <Text style={styles.inputLabel}>📧 البريد الإلكتروني</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.inputLTR]}
               placeholder="example@email.com"
               placeholderTextColor="#999"
               value={email}
@@ -209,27 +324,27 @@ export default function Login({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              /* 🔹 تركنا المحاذاة الافتراضية تعتمد على اتجاه لغة الكتابة داخل الحقل */
-              editable={!loading}
+              editable={!loading && !googleLoading}
             />
           </View>
 
-          <View style={styles.inputContainer}>
+          {/* ✅ حقل كلمة المرور */}
+          <View style={styles.inputBlock}>
             <Text style={styles.inputLabel}>🔑 كلمة المرور</Text>
             <View style={styles.passwordContainer}>
               <TextInput
-                style={[styles.input, styles.passwordInput]}
+                style={[styles.input, styles.passwordInput, styles.inputLTR]}
                 placeholder="••••••••"
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
-                editable={!loading}
+                editable={!loading && !googleLoading}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
                 onPress={() => setShowPassword(!showPassword)}
-                disabled={loading}
+                disabled={loading || googleLoading}
               >
                 <Text style={styles.eyeText}>
                   {showPassword ? '🙈' : '👁️'}
@@ -242,9 +357,9 @@ export default function Login({ navigation }) {
           </View>
 
           <TouchableOpacity
-            style={[styles.mainButton, loading && styles.mainButtonDisabled]}
+            style={[styles.mainButton, (loading || googleLoading) && styles.mainButtonDisabled]}
             onPress={handleAuth}
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" size="small" />
@@ -258,7 +373,7 @@ export default function Login({ navigation }) {
           <TouchableOpacity
             style={styles.switchButton}
             onPress={toggleMode}
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             <Text style={styles.switchButtonText}>
               {isRegistering
@@ -315,38 +430,94 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-  inputContainer: {
+  
+  // ⭐ Google Button Styles
+  googleButton: {
+    backgroundColor: '#4285F4',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
     marginBottom: 16,
+    elevation: 2,
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIcon: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginRight: 10,
+    backgroundColor: '#fff',
+    color: '#4285F4',
+    width: 24,
+    height: 24,
+    textAlign: 'center',
+    lineHeight: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  googleButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  
+  // ⭐ Divider Styles
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e0e0e0',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: '#999',
+    fontSize: 13,
+  },
+  
+  inputBlock: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
   },
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#34495e',
     marginBottom: 6,
-    /* 🔹 استخدام التناسق التلقائي بدلاً من تثبيتها لليمين فقط */
-    textAlign: 'left',
+    textAlign: 'auto',
   },
   input: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 10,
     padding: 12,
     fontSize: 15,
     color: '#333',
-    /* 🔹 استخدام التناسق التلقائي */
+  },
+  inputLTR: {
     textAlign: 'left',
+    writingDirection: 'ltr',
   },
   passwordContainer: {
     justifyContent: 'center',
   },
   passwordInput: {
-    /* 🔹 تحويل البادنج ليكون مرن بناء على الإتجاه بدلاً من Left الثابتة */
     paddingEnd: 50,
   },
   eyeButton: {
     position: 'absolute',
-    /* 🔹 ربط العين بنهاية التكست الحركية (End) بدلاً من الشمال الثابت (Left) */
     end: 12,
     padding: 4,
   },
@@ -356,7 +527,7 @@ const styles = StyleSheet.create({
   hintText: {
     fontSize: 11,
     color: '#95a5a6',
-    textAlign: 'left',
+    textAlign: 'right',
     marginTop: 4,
   },
   mainButton: {
