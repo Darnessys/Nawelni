@@ -1,4 +1,4 @@
-package com.nawelni
+package com.anonymous.Nawelni
 
 import android.app.Application
 import com.facebook.react.PackageList

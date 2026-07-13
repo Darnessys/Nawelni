@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "476712190716",
+    "project_id": "nawelniapp",
+    "storage_bucket": "nawelniapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:476712190716:android:36ee05eaecdc5cc4704d79",
+        "android_client_info": {
+          "package_name": "com.anonymous.Nawelni"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "476712190716-um7873sqr5g5l57jr933qrs2k6sbcruj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anonymous.Nawelni",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "476712190716-s09vbbl0nk7il6inrv6mgs4s7184pcim.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQzEempcuKszqSaFw-E6jJDOLkkpIgFCI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "476712190716-s09vbbl0nk7il6inrv6mgs4s7184pcim.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

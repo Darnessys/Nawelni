@@ -1,4 +1,4 @@
-package com.nawelni
+package com.anonymous.Nawelni
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

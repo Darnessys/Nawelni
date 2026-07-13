@@ -15,7 +15,66 @@ buildscript {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        classpath("com.google.gms:google-services:4.4.2")
     }
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// محاصرة jcenter وتوجيهها صامتاً إلى mavenCentral
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        
+        def target = owner
+        ext.jcenter = {
+            return target.mavenCentral()
+        }
+    }
+}
+
+// ضبط الـ SDK وإعادة إحياء التكوينات وتطهير التبعيات المكسورة
+subprojects { project ->
+    project.plugins.withType(com.android.build.gradle.BasePlugin).configureEach {
+        project.android {
+            compileSdk = rootProject.ext.compileSdkVersion
+            buildToolsVersion = rootProject.ext.buildToolsVersion
+            
+            defaultConfig {
+                minSdk = rootProject.ext.minSdkVersion
+                targetSdk = rootProject.ext.targetSdkVersion
+            }
+        }
+        
+        project.configurations {
+            def compileConfig = maybeCreate("compile")
+            if (findByName("implementation")) {
+                implementation.extendsFrom(compileConfig)
+            }
+            
+            def providedConfig = maybeCreate("provided")
+            if (findByName("compileOnly")) {
+                compileOnly.extendsFrom(providedConfig)
+            }
+
+            def testCompileConfig = maybeCreate("testCompile")
+            if (findByName("testImplementation")) {
+                testImplementation.extendsFrom(testCompileConfig)
+            }
+        }
+    }
+    
+    // 🛡️ الضربة القاضية: استبعاد حزمة com.android.support بالكامل من كل مشروع فرعي لمنع التضارب والـ Duplicate Classes
+    project.configurations.configureEach { config ->
+        config.exclude group: 'com.android.support'
+    }
+    
+    // تأمين الـ buildscript الخاص بالمكتبات الفرعية ضد jcenter
+    project.buildscript.repositories {
+        def target = owner
+        ext.jcenter = {
+            return target.mavenCentral()
+        }
+    }
+}

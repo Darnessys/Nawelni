@@ -1,6 +1,22 @@
-pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
-plugins { id("com.facebook.react.settings") }
+pluginManagement { 
+    includeBuild("../node_modules/@react-native/gradle-plugin") 
+}
+
+plugins { 
+    id("com.facebook.react.settings") 
+}
+
+// التعديل: السماح للمشاريع مع وضع سياسة موحدة للمستودعات الآمنة
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
-rootProject.name = 'Nawelni'
+
+rootProject.name = "Nawelni"
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
