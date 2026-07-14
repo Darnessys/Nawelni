@@ -82,6 +82,14 @@ android {
         resources {
             pickFirsts += "META-INF/androidx.appcompat_appcompat.version"
         }
+        pickFirsts += [
+            "mipmap-xhdpi/ic_launcher.png",
+            "mipmap-xhdpi/ic_launcher_round.png",
+            "mipmap-xxhdpi/ic_launcher.png",
+            "mipmap-xxhdpi/ic_launcher_round.png",
+            "mipmap-xxxhdpi/ic_launcher.png",
+            "mipmap-xxxhdpi/ic_launcher_round.png"
+        ]
     }
     namespace "com.anonymous.Nawelni"
     defaultConfig {
